@@ -54,13 +54,18 @@ struct PlaylistsTab: View {
                 .navigationSplitViewColumnWidth(min: 260, ideal: 300)
         } detail: {
             RunView()
-                // i comandi principali stanno qui sotto e non nella toolbar:
-                // con la finestra stretta la toolbar li nasconderebbe nel menu »
-                .safeAreaInset(edge: .bottom) { SyncBar() }
+                // tutta l'altezza, così la barra sta davvero in fondo
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Sincronizza sta qui sotto e non nella toolbar:
+                // con la finestra stretta la toolbar lo nasconderebbe nel menu »
+                .safeAreaInset(edge: .bottom, spacing: 0) { SyncBar() }
         }
         .searchable(text: $model.filter, placement: .sidebar, prompt: "Cerca playlist")
         .toolbar {
             ToolbarItemGroup {
+                CookiesPicker()
+                    .fixedSize()
+
                 Button {
                     model.openDest()
                 } label: {
@@ -77,21 +82,18 @@ struct PlaylistsTab: View {
     }
 }
 
-/// Barra fissa in fondo alla parte destra: login, anteprima e Sincronizza.
+/// Barra fissa in fondo alla parte destra: Solo anteprima e Sincronizza.
 struct SyncBar: View {
     @Environment(SyncModel.self) private var model
 
     var body: some View {
         @Bindable var model = model
         HStack(spacing: 14) {
-            CookiesPicker()
-                .labelsHidden()
-                .fixedSize()
+            Spacer(minLength: 8)
             Toggle("Solo anteprima", isOn: $model.dryRun)
                 .toggleStyle(.checkbox)
                 .help("Cerca i match senza scaricare nulla")
                 .disabled(model.isRunning)
-            Spacer(minLength: 8)
             if model.isRunning {
                 Button(role: .cancel) {
                     model.cancel()
