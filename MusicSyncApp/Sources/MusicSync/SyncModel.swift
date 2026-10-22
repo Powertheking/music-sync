@@ -259,11 +259,16 @@ final class SyncModel {
     }
 
     private static func tail(_ data: Data, lines: Int = 4) -> String {
-        String(decoding: data, as: UTF8.self)
+        let all = String(decoding: data, as: UTF8.self)
             .split(separator: "\n")
             .filter { !$0.hasPrefix("WARNING") && !$0.hasPrefix("[debug]") }
-            .suffix(lines)
-            .joined(separator: "\n")
+        // di un traceback Python basta l'ultima riga con l'errore
+        if let last = all.last(where: { $0.contains("Error") || $0.hasPrefix("ERROR") }) {
+            return last.replacingOccurrences(
+                of: #"^[\w.]*(Error|Exception): (ERROR: )?"#, with: "",
+                options: .regularExpression)
+        }
+        return all.suffix(lines).joined(separator: "\n")
     }
 
     /// Esegue lo script fino alla fine; restituisce stdout oppure il messaggio d'errore.
@@ -315,9 +320,8 @@ final class SyncModel {
         isSearching = true
         searchError = nil
         defer { isSearching = false }
-        var args = ["search", q, "-n", "12", "--json"]
-        if !cookies.isEmpty { args += ["--cookies-from-browser", cookies] }
-        switch await runToEnd(args) {
+        // la ricerca non ha bisogno del login: i cookie servono solo per scaricare
+        switch await runToEnd(["search", q, "-n", "12", "--json"]) {
         case .failure(let e):
             searchError = e.message
         case .success(let data):

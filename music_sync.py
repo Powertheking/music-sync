@@ -261,7 +261,12 @@ def cookies_usable(browser):
         extract_cookies_from_browser(b, profile or None)
         return True
     except Exception as e:
-        emit("warn", f"cookie di {b} non leggibili, continuo senza: {e}")
+        hint = ""
+        if "not permitted" in str(e):
+            hint = (" Dai a Music Sync l'Accesso completo al disco in Impostazioni di "
+                    "Sistema > Privacy e sicurezza.")
+        emit("warn", f"Login YouTube da {b} non disponibile, continuo senza: i video con "
+                     f"blocco età verranno saltati.{hint}")
         return False
 
 
@@ -466,6 +471,9 @@ def guess_tags(title, channel):
         artist, name = t.split(" - ", 1)
         return artist.strip(), name.strip()
     artist = re.sub(r"\s*(- Topic|VEVO)$", "", channel or "", flags=re.I).strip()
+    # "Metallica: Enter Sandman" sul canale Metallica
+    if artist and t.lower().startswith(artist.lower() + ":"):
+        t = t[len(artist) + 1:].strip()
     return artist, t
 
 
@@ -539,7 +547,10 @@ def main():
     a = ap.parse_args()
 
     if a.cmd == "search":
-        res = search_youtube(a.query, a.n, a.cookies_from_browser)
+        cookies = a.cookies_from_browser
+        if cookies and not cookies_usable(cookies):
+            cookies = None
+        res = search_youtube(a.query, a.n, cookies)
         if a.json:
             print(json.dumps(res, ensure_ascii=False))
         else:

@@ -13,7 +13,8 @@ files = [app, readme]
 symlinks = {"Applications": "/Applications"}
 
 background = defines["background"]  # noqa: F821
-window_rect = ((200, 120), (640, 400))
+# finestra più alta del contenuto: niente scorrimento anche con la barra di stato
+window_rect = ((200, 120), (640, 470))
 default_view = "icon-view"
 show_status_bar = False
 show_tab_view = False
@@ -24,7 +25,7 @@ show_sidebar = False
 icon_size = 112
 text_size = 13
 icon_locations = {
-    os.path.basename(app): (160, 200),
-    "Applications": (480, 200),
-    os.path.basename(readme): (320, 330),
+    os.path.basename(app): (160, 150),
+    "Applications": (480, 150),
+    os.path.basename(readme): (320, 300),
 }
