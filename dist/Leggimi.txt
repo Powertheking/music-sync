@@ -36,9 +36,16 @@ Scheda "Playlist"
 - I file finiscono in Musica/YT-Sync, una cartella per playlist, con la
   playlist .m3u8 nello stesso ordine di Musica.
 - Risincronizzando vengono scaricati solo i brani nuovi.
-- Spotify: "Aggiungi link Spotify..." e incolla il link della playlist
-  (in Spotify: ··· > Condividi > Copia link alla playlist). Solo playlist
-  pubbliche, e al massimo i primi 100 brani.
+- Spotify: premi "Aggiungi da Spotify..." e segui i tre passi:
+  1. "Apri Exportify" e accedi con il tuo account Spotify;
+  2. premi "Export" accanto alla playlist (o "Export All" per tutte);
+  3. Music Sync trova da solo il file nei Download e aggiunge la playlist.
+  Funziona anche con le playlist private, senza limite di brani. La prima
+  volta macOS può chiedere se Music Sync può accedere ai Download: Consenti.
+  Quando la playlist cambia su Spotify, ripeti i passi 1-2: vengono scaricati
+  solo i brani nuovi.
+  Esporti solo l'elenco dei brani: Music Sync non accede al tuo account.
+  Per una playlist pubblica puoi anche incollare il link (massimo 100 brani).
 
 
 IMPOSTAZIONI (menu Music Sync > Impostazioni, oppure ⌘,)

@@ -12,9 +12,11 @@ struct Playlist: Identifiable, Codable, Hashable {
     /// Playlist creata dall'utente: niente smart, cartelle o liste di sistema.
     /// Solo per le playlist Spotify (id "sp:...").
     var spotifyURL: String?
+    /// Solo per le playlist importate da CSV di Exportify (id "csv:...").
+    var csvPath: String?
 
     var isRegular: Bool { !smart && special == "none" }
-    var isSpotify: Bool { spotifyURL != nil }
+    var isSpotify: Bool { spotifyURL != nil || csvPath != nil }
 }
 
 enum TrackStatus {
@@ -225,8 +227,81 @@ final class SyncModel {
     }
 
     func removeSpotify(_ id: String) {
+        if let csv = spotify.first(where: { $0.id == id })?.csvPath {
+            try? FileManager.default.removeItem(atPath: csv)
+        }
         spotify.removeAll { $0.id == id }
         selected.remove(id)
+    }
+
+    /// Dove l'app tiene una copia dei CSV importati (i Download si possono svuotare).
+    private var csvStore: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                            in: .userDomainMask)[0]
+        return base.appendingPathComponent("Music Sync/Spotify", isDirectory: true)
+    }
+
+    /// Importa un CSV di Exportify, o uno zip di "Export All". Restituisce le playlist
+    /// aggiunte; un file che non è un export di Exportify dà errore.
+    func importSpotifyFile(_ url: URL) async -> Result<[Playlist], ScriptError> {
+        let fm = FileManager.default
+        var csvs: [URL] = []
+        if url.pathExtension.lowercased() == "zip" {
+            let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? fm.removeItem(at: tmp) }
+            let unzip = Process()
+            unzip.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+            unzip.arguments = ["-x", "-k", url.path, tmp.path]
+            do {
+                try unzip.run()
+                unzip.waitUntilExit()
+            } catch {
+                return .failure(ScriptError("Non riesco ad aprire lo zip."))
+            }
+            let found = fm.enumerator(at: tmp, includingPropertiesForKeys: nil)?
+                .compactMap { $0 as? URL }
+                .filter { $0.pathExtension.lowercased() == "csv"
+                    && !$0.path.contains("__MACOSX") } ?? []
+            // copio subito: la cartella temporanea sparisce all'uscita
+            for f in found { csvs += (try? storeCSV(f)).map { [$0] } ?? [] }
+        } else {
+            do {
+                csvs = [try storeCSV(url)]
+            } catch {
+                return .failure(ScriptError("Non riesco a copiare il file: "
+                                            + error.localizedDescription))
+            }
+        }
+        guard !csvs.isEmpty else {
+            return .failure(ScriptError("Nello zip non ci sono file CSV."))
+        }
+
+        var added: [Playlist] = []
+        var lastError: ScriptError?
+        for csv in csvs {
+            switch await runToEnd(["csv-info", csv.path]) {
+            case .failure(let e):
+                try? fm.removeItem(at: csv)
+                lastError = e
+            case .success(let data):
+                guard let pl = try? JSONDecoder().decode(Playlist.self, from: data) else { continue }
+                spotify.removeAll { $0.id == pl.id }
+                spotify.append(pl)
+                selected.insert(pl.id)
+                added.append(pl)
+            }
+        }
+        if added.isEmpty, let lastError { return .failure(lastError) }
+        return .success(added)
+    }
+
+    private func storeCSV(_ src: URL) throws -> URL {
+        let fm = FileManager.default
+        try fm.createDirectory(at: csvStore, withIntermediateDirectories: true)
+        let dst = csvStore.appendingPathComponent(src.lastPathComponent)
+        if fm.fileExists(atPath: dst.path) { try fm.removeItem(at: dst) }
+        try fm.copyItem(at: src, to: dst)
+        return dst
     }
 
     func toggle(_ id: String) {
@@ -375,8 +450,10 @@ final class SyncModel {
             runs.append(PlaylistRun(id: pl.id, name: pl.name))
             let idx = runs.count - 1
 
-            var args = (pl.spotifyURL.map { ["sync", "--spotify", $0] } ?? ["sync", "--id", pl.id])
-                + ["--dest", destPath, "--json"] + audioArgs
+            var args = pl.csvPath.map { ["sync", "--csv", $0, "--name", pl.name] }
+                ?? pl.spotifyURL.map { ["sync", "--spotify", $0] }
+                ?? ["sync", "--id", pl.id]
+            args += ["--dest", destPath, "--json"] + audioArgs
             if dryRun { args.append("--dry-run") }
             if !cookies.isEmpty { args += ["--cookies-from-browser", cookies] }
 

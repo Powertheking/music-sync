@@ -435,6 +435,45 @@ def spotify_playlist(url):
     return {"id": sid, "name": ent.get("name") or sid, "tracks": tracks}
 
 
+# Export CSV di Exportify (exportify.app): le intestazioni sono tradotte nella
+# lingua del browser, l'ordine delle colonne no. Si legge quindi per posizione.
+CSV_URI, CSV_NAME, CSV_ARTISTS, CSV_ALBUM, CSV_DURATION = 0, 1, 3, 5, 12
+
+
+def csv_playlist_name(path):
+    """Exportify salva 'Estate 2026' come estate_2026.csv."""
+    stem = Path(path).stem.replace("_", " ").strip()
+    return stem[:1].upper() + stem[1:] if stem else "Playlist"
+
+
+def read_spotify_csv(path):
+    """Brani da un CSV di Exportify; esce con un messaggio se il file non lo è."""
+    import csv
+    tracks = []
+    try:
+        with open(path, newline="", encoding="utf-8-sig") as f:
+            for row in csv.reader(f):
+                if len(row) <= CSV_DURATION or not row[CSV_URI].startswith("spotify:"):
+                    continue  # intestazione o riga non valida
+                # gli artisti sono separati da ", " e le virgole nei nomi sono "\,"
+                artists = [a.replace("\\,", ",")
+                           for a in re.split(r"(?<!\\), ", row[CSV_ARTISTS]) if a]
+                try:
+                    dur = int(row[CSV_DURATION]) / 1000
+                except ValueError:
+                    dur = 0
+                tracks.append({
+                    "id": row[CSV_URI], "name": row[CSV_NAME],
+                    "artist": ", ".join(artists), "album": row[CSV_ALBUM],
+                    "duration": dur, "location": None,
+                })
+    except (OSError, UnicodeDecodeError, csv.Error) as e:
+        sys.exit(f"File non leggibile: {e}")
+    if not tracks:
+        sys.exit("Questo file non sembra un export di Exportify (nessun brano Spotify trovato).")
+    return tracks
+
+
 def spotify_folder(name):
     return f"{safe(name)} (Spotify)"
 
@@ -507,8 +546,14 @@ def main():
     s.add_argument("--spotify", metavar="LINK",
                    help="playlist Spotify pubblica invece di una di Musica "
                         f"(massimo {SPOTIFY_EMBED_LIMIT} brani)")
+    s.add_argument("--csv", metavar="FILE",
+                   help="playlist Spotify esportata con Exportify (anche privata)")
+    s.add_argument("--name", help="con --csv: nome della playlist (default: dal file)")
     si = sub.add_parser("spotify-info", help="nome e numero brani di una playlist Spotify")
     si.add_argument("url")
+    ci = sub.add_parser("csv-info", help="nome e numero brani di un CSV di Exportify")
+    ci.add_argument("path")
+    ci.add_argument("--name", help="nome della playlist (default: dal nome del file)")
     s.add_argument("--all", action="store_true",
                    help="tutte le playlist normali (escluse smart, cartelle e di sistema)")
     s.add_argument("--json", action="store_true",
@@ -582,6 +627,14 @@ def main():
             sys.exit(1)
         return
 
+    if a.cmd == "csv-info":
+        tracks = read_spotify_csv(a.path)
+        name = a.name or csv_playlist_name(a.path)
+        print(json.dumps({"id": "csv:" + Path(a.path).stem.lower(), "name": name,
+                          "count": len(tracks), "smart": False, "special": "none",
+                          "csvPath": str(Path(a.path).resolve())}, ensure_ascii=False))
+        return
+
     if a.cmd == "spotify-info":
         sp = spotify_playlist(a.url)
         print(json.dumps({"id": "sp:" + sp["id"], "name": sp["name"],
@@ -600,6 +653,19 @@ def main():
         return
 
     JSON_OUT = a.json
+    if a.csv:
+        if shutil.which("ffmpeg") is None:
+            sys.exit("ffmpeg non trovato: brew install ffmpeg")
+        tracks = read_spotify_csv(a.csv)
+        name = a.name or csv_playlist_name(a.csv)
+        cookies = a.cookies_from_browser
+        if cookies and not cookies_usable(cookies):
+            cookies = None
+        sync_playlist(name, a.dest, a.tolerance, a.prune, a.dry_run, False, cookies,
+                      folder_name=spotify_folder(name), fmt=a.format,
+                      quality=a.quality, tracks=tracks)
+        return
+
     if a.spotify:
         if shutil.which("ffmpeg") is None:
             sys.exit("ffmpeg non trovato: brew install ffmpeg")

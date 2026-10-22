@@ -109,10 +109,8 @@ struct PlaylistSidebar: View {
                 ForEach(model.visibleSpotify) { pl in
                     PlaylistToggle(pl: pl)
                         .contextMenu {
-                            Button("Apri in Spotify") {
-                                if let u = pl.spotifyURL.flatMap(URL.init(string:)) {
-                                    NSWorkspace.shared.open(u)
-                                }
+                            if let u = pl.spotifyURL.flatMap(URL.init(string:)) {
+                                Button("Apri in Spotify") { NSWorkspace.shared.open(u) }
                             }
                             Button("Rimuovi dall'elenco", role: .destructive) {
                                 model.removeSpotify(pl.id)
@@ -122,7 +120,7 @@ struct PlaylistSidebar: View {
                 Button {
                     showAddSpotify = true
                 } label: {
-                    Label("Aggiungi link Spotify…", systemImage: "plus.circle")
+                    Label("Aggiungi da Spotify…", systemImage: "plus.circle")
                 }
                 .buttonStyle(.borderless)
                 .disabled(model.isRunning)
@@ -133,7 +131,20 @@ struct PlaylistSidebar: View {
                 ForEach(model.visible) { PlaylistToggle(pl: $0) }
             }
         }
-        .sheet(isPresented: $showAddSpotify) { AddSpotifySheet() }
+        .sheet(isPresented: $showAddSpotify) { SpotifyImportSheet() }
+        // un CSV di Exportify trascinato sull'elenco si importa direttamente
+        .dropDestination(for: URL.self) { urls, _ in
+            let files = urls.filter { ["csv", "zip"].contains($0.pathExtension.lowercased()) }
+            guard !files.isEmpty else { return false }
+            Task {
+                for f in files {
+                    if case .failure(let e) = await model.importSpotifyFile(f) {
+                        model.error = e.message
+                    }
+                }
+            }
+            return true
+        }
         .overlay {
             if model.isLoading {
                 ProgressView("Leggo le playlist da Music…")
@@ -192,48 +203,6 @@ struct PlaylistToggle: View {
         }
         .toggleStyle(.checkbox)
         .disabled(model.isRunning)
-    }
-}
-
-struct AddSpotifySheet: View {
-    @Environment(SyncModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
-    @State private var link = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Aggiungi playlist Spotify").font(.headline)
-            Text("In Spotify: tasto ··· sulla playlist > Condividi > Copia link alla playlist. "
-                 + "Funziona solo con playlist pubbliche e legge al massimo i primi 100 brani.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            TextField("https://open.spotify.com/playlist/…", text: $link)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit(add)
-            if let err = model.spotifyError {
-                Text(err).font(.caption).foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            HStack {
-                if model.isAddingSpotify { ProgressView().controlSize(.small) }
-                Spacer()
-                Button("Annulla", role: .cancel) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Aggiungi", action: add)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(link.isEmpty || model.isAddingSpotify)
-            }
-        }
-        .padding(20)
-        .frame(width: 440)
-        .onAppear { model.spotifyError = nil }
-    }
-
-    private func add() {
-        Task {
-            if await model.addSpotify(link) { dismiss() }
-        }
     }
 }
 

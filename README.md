@@ -28,14 +28,22 @@ python3.13 -m venv .venv && .venv/bin/pip install "yt-dlp[default]" mutagen
 .venv/bin/python music_sync.py sync "Nome Playlist" --dry-run
 .venv/bin/python music_sync.py sync "Nome Playlist" --cookies-from-browser safari
 .venv/bin/python music_sync.py sync --spotify "https://open.spotify.com/playlist/..."
+.venv/bin/python music_sync.py sync --csv ~/Downloads/estate_2026.csv
 .venv/bin/python music_sync.py sync "Nome Playlist" --format flac --dest /Volumes/Disco/Musica
 .venv/bin/python music_sync.py search "luciid charm"
 .venv/bin/python music_sync.py get <video_id> --format mp3 --quality 320
 ```
 
 Formati: `mp3` (con `--quality` 128-320 o `0` = VBR V0), `m4a`, `flac`, `wav`,
-`aiff`. Le playlist Spotify si leggono dalla pagina embed pubblica, senza
-account developer, quindi solo playlist pubbliche e al massimo 100 brani.
+`aiff`.
+
+Playlist Spotify, in due modi e senza account developer:
+
+- `--csv`: file esportato con [Exportify](https://exportify.app), anche per playlist
+  private e senza limite di brani. Nell'app c'è una procedura guidata che
+  apre Exportify e prende da sola il file dalla cartella Download.
+- `--spotify`: link a una playlist pubblica, letto dalla pagina embed
+  (massimo 100 brani).
 
 I file vanno in `~/Music/YT-Sync/<Playlist>/` (o in `--dest`) (più `Singoli/` per i brani
 scaricati a mano), con la playlist `.m3u8` e lo stato `.sync_state.json`:
