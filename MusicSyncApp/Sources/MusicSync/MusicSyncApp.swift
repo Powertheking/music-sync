@@ -11,6 +11,7 @@ struct MusicSyncApp: App {
                 .frame(minWidth: 860, minHeight: 520)
                 .task { await model.loadPlaylists() }
         }
+        .defaultSize(width: 1040, height: 680)
         Settings {
             SettingsView().environment(model)
         }
@@ -53,16 +54,13 @@ struct PlaylistsTab: View {
                 .navigationSplitViewColumnWidth(min: 260, ideal: 300)
         } detail: {
             RunView()
+                // i comandi principali stanno qui sotto e non nella toolbar:
+                // con la finestra stretta la toolbar li nasconderebbe nel menu »
+                .safeAreaInset(edge: .bottom) { SyncBar() }
         }
         .searchable(text: $model.filter, placement: .sidebar, prompt: "Cerca playlist")
         .toolbar {
             ToolbarItemGroup {
-                CookiesPicker()
-
-                Toggle("Solo anteprima", isOn: $model.dryRun)
-                    .toggleStyle(.checkbox)
-                    .help("Cerca i match senza scaricare nulla")
-
                 Button {
                     model.openDest()
                 } label: {
@@ -74,27 +72,58 @@ struct PlaylistsTab: View {
                     Label("Impostazioni", systemImage: "gearshape")
                 }
                 .help("Cartella, formato e qualità")
-
-                if model.isRunning {
-                    Button(role: .cancel) {
-                        model.cancel()
-                    } label: {
-                        Label("Interrompi", systemImage: "stop.fill")
-                    }
-                } else {
-                    Button {
-                        Task { await model.sync() }
-                    } label: {
-                        Label("Sincronizza (\(model.selected.count))",
-                              systemImage: "arrow.triangle.2.circlepath")
-                            .labelStyle(.titleAndIcon)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(model.selected.isEmpty || model.isLoading)
-                    .keyboardShortcut("r", modifiers: .command)
-                }
             }
         }
+    }
+}
+
+/// Barra fissa in fondo alla parte destra: login, anteprima e Sincronizza.
+struct SyncBar: View {
+    @Environment(SyncModel.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        HStack(spacing: 14) {
+            CookiesPicker()
+                .labelsHidden()
+                .fixedSize()
+            Toggle("Solo anteprima", isOn: $model.dryRun)
+                .toggleStyle(.checkbox)
+                .help("Cerca i match senza scaricare nulla")
+                .disabled(model.isRunning)
+            Spacer(minLength: 8)
+            if model.isRunning {
+                Button(role: .cancel) {
+                    model.cancel()
+                } label: {
+                    Label("Interrompi", systemImage: "stop.fill")
+                        .frame(minWidth: 150)
+                }
+                .controlSize(.large)
+            } else {
+                Button {
+                    Task { await model.sync() }
+                } label: {
+                    Label(syncTitle, systemImage: "arrow.triangle.2.circlepath")
+                        .frame(minWidth: 150)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(model.selected.isEmpty || model.isLoading)
+                .keyboardShortcut("r", modifiers: .command)
+                .help(model.selected.isEmpty ? "Spunta almeno una playlist a sinistra" : "⌘R")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
+    }
+
+    private var syncTitle: String {
+        let n = model.selected.count
+        let verb = model.dryRun ? "Anteprima" : "Sincronizza"
+        return n == 0 ? verb : "\(verb) \(n) playlist"
     }
 }
 
@@ -223,7 +252,8 @@ struct RunView: View {
                 ContentUnavailableView(
                     "Scegli le playlist",
                     systemImage: "music.note.list",
-                    description: Text("Spunta le playlist a sinistra e premi Sincronizza.\n"
+                    description: Text("Spunta le playlist a sinistra e premi Sincronizza "
+                                      + "qui sotto.\n"
                                       + "Formato \(model.format.label), cartella "
                                       + "\(model.destDisplay). Si cambiano nelle Impostazioni (⌘,).")
                 )
