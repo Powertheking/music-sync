@@ -1,0 +1,10 @@
+# build e dipendenze locali
+build/
+.venv/
+MusicSyncApp/.build/
+MusicSyncApp/.swiftpm/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store

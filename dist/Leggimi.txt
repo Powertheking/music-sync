@@ -1,0 +1,60 @@
+MUSIC SYNC
+==========
+
+Sincronizza le playlist di Musica (Apple Music) in cartelle di MP3 scaricati
+da YouTube, controllando la durata per scartare live, cover e remix.
+Puoi anche cercare e scaricare un singolo brano.
+
+Requisiti: Mac con chip Apple (M1 o successivi) e macOS 14 Sonoma o successivo.
+
+
+INSTALLAZIONE
+-------------
+
+1. Trascina "Music Sync" sulla cartella Applications in questa finestra.
+
+2. Apri Music Sync da Applicazioni. La prima volta macOS la blocca perché
+   l'app non viene dall'App Store e non è notarizzata da Apple:
+   - premi "Fine" (o "OK") nell'avviso;
+   - apri Impostazioni di Sistema > Privacy e sicurezza;
+   - scorri in basso e premi "Apri comunque" accanto a Music Sync;
+   - conferma con la password del Mac.
+   Serve solo la prima volta.
+
+3. Quando compare "Music Sync vuole controllare Musica", premi "Consenti".
+   Senza questo permesso l'app non vede le playlist.
+   Se hai premuto "Non consentire" per sbaglio: Impostazioni di Sistema >
+   Privacy e sicurezza > Automazione > Music Sync > attiva Musica.
+
+
+USO
+---
+
+Scheda "Playlist"
+- Spunta le playlist da sincronizzare e premi "Sincronizza".
+- "Solo anteprima" mostra i video scelti senza scaricare nulla.
+- I file finiscono in Musica/YT-Sync, una cartella per playlist, con la
+  playlist .m3u8 nello stesso ordine di Musica.
+- Risincronizzando vengono scaricati solo i brani nuovi.
+
+Scheda "Cerca brano"
+- Scrivi artista e titolo, premi Invio e scegli "Scarica" sul risultato giusto.
+- Gli MP3 finiscono in Musica/YT-Sync/Singoli.
+
+
+VIDEO CON BLOCCO ETÀ (FACOLTATIVO)
+----------------------------------
+
+Alcuni video YouTube richiedono il login. Per scaricarli:
+- accedi a YouTube in Safari (o Chrome/Firefox);
+- in Music Sync scegli quel browser dal menu "Login YouTube";
+- solo per Safari: Impostazioni di Sistema > Privacy e sicurezza >
+  Accesso completo al disco > aggiungi Music Sync.
+Se non lo fai, l'app funziona lo stesso: salta solo quei pochi brani.
+
+
+NOTE
+----
+
+Scaricare da YouTube può violare i termini di servizio di YouTube.
+Usa l'app solo per uso personale.
