@@ -261,7 +261,17 @@ struct RunHeader: View {
                 ProgressView(value: Double(run.completed), total: Double(run.total))
             }
             if let note = run.note {
-                Text(note).font(.caption).foregroundStyle(.orange)
+                Text(note)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                if note.contains("Accesso completo al disco") {
+                    Button("Apri Accesso completo al disco…") {
+                        NSWorkspace.shared.open(URL(string:
+                            "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!)
+                    }
+                    .font(.caption)
+                }
             }
             if let summary = run.summary {
                 Text(summary)

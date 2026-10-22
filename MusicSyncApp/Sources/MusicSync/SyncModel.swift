@@ -476,6 +476,11 @@ final class SyncModel {
             if p.terminationStatus != 0 {
                 runs[idx].failed = true
                 runs[idx].summary = cancelled ? "Interrotta" : Self.tail(errData)
+                // il brano in corso non finirà più: niente rotellina che gira per sempre
+                for r in runs[idx].tracks.indices where runs[idx].tracks[r].status == .searching {
+                    runs[idx].tracks[r].status = .failed
+                    runs[idx].tracks[r].note = cancelled ? "Interrotto" : nil
+                }
             }
         }
     }
