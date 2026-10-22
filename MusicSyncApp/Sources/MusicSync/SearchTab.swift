@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Cerca un brano su YouTube e scaricalo come MP3 in <dest>/Singoli.
+/// Cerca un brano su YouTube e scaricalo in <dest>/Singoli nel formato scelto.
 struct SearchTab: View {
     @Environment(SyncModel.self) private var model
     @FocusState private var focused: Bool
@@ -19,7 +19,7 @@ struct SearchTab: View {
                               || model.isSearching)
                 CookiesPicker().fixedSize()
                 Button {
-                    model.openDest((model.dest as NSString).expandingTildeInPath + "/Singoli")
+                    model.openDest(model.destPath + "/Singoli")
                 } label: {
                     Image(systemName: "folder")
                 }
@@ -38,8 +38,9 @@ struct SearchTab: View {
                     ContentUnavailableView(
                         "Cerca un brano",
                         systemImage: "music.note",
-                        description: Text("Gli MP3 finiscono in \(model.dest)/Singoli, "
-                                          + "con artista e titolo ricavati dal video.")
+                        description: Text("I file (\(model.format.label)) finiscono in "
+                                          + "\(model.destDisplay)/Singoli, con artista e "
+                                          + "titolo ricavati dal video.")
                     )
                 } else {
                     List(model.results) { ResultRow(result: $0) }

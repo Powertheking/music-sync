@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import Observation
 
-struct Playlist: Identifiable, Decodable, Hashable {
+struct Playlist: Identifiable, Codable, Hashable {
     let id: String
     let name: String
     let count: Int
@@ -10,7 +10,11 @@ struct Playlist: Identifiable, Decodable, Hashable {
     let special: String
 
     /// Playlist creata dall'utente: niente smart, cartelle o liste di sistema.
+    /// Solo per le playlist Spotify (id "sp:...").
+    var spotifyURL: String?
+
     var isRegular: Bool { !smart && special == "none" }
+    var isSpotify: Bool { spotifyURL != nil }
 }
 
 enum TrackStatus {
@@ -34,6 +38,7 @@ struct PlaylistRun: Identifiable {
     var folder: String?
     var tracks: [TrackRow] = []
     var summary: String?
+    var note: String?
     var failed = false
 
     var completed: Int { tracks.filter { $0.status.isFinal }.count }
@@ -55,6 +60,24 @@ struct SearchResult: Identifiable, Decodable {
 struct ScriptError: Error {
     let message: String
     init(_ message: String) { self.message = message }
+}
+
+enum AudioFormat: String, CaseIterable, Identifiable {
+    case mp3, m4a, flac, wav, aiff
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .mp3: "MP3"
+        case .m4a: "AAC (.m4a)"
+        case .flac: "FLAC"
+        case .wav: "WAV"
+        case .aiff: "AIFF"
+        }
+    }
+
+    /// mp3 e m4a hanno un bitrate da scegliere, gli altri sono senza perdita.
+    var hasQuality: Bool { self == .mp3 || self == .m4a }
 }
 
 enum DownloadState {
@@ -91,7 +114,44 @@ final class SyncModel {
     var searchError: String?
     var downloads: [String: DownloadState] = [:]
 
-    let dest = "~/Music/YT-Sync"
+    // impostazioni (finestra Impostazioni, ⌘,)
+    var dest: String = UserDefaults.standard.string(forKey: "dest") ?? "~/Music/YT-Sync" {
+        didSet { UserDefaults.standard.set(dest, forKey: "dest") }
+    }
+    var format: AudioFormat = AudioFormat(
+        rawValue: UserDefaults.standard.string(forKey: "format") ?? "") ?? .mp3 {
+        didSet { UserDefaults.standard.set(format.rawValue, forKey: "format") }
+    }
+    var quality: String = UserDefaults.standard.string(forKey: "quality") ?? "192" {
+        didSet { UserDefaults.standard.set(quality, forKey: "quality") }
+    }
+
+    var destPath: String { (dest as NSString).expandingTildeInPath }
+    /// Percorso breve da mostrare: ~/... per la home, nome del volume per i dischi esterni.
+    var destDisplay: String { (destPath as NSString).abbreviatingWithTildeInPath }
+
+    private var audioArgs: [String] {
+        var a = ["--format", format.rawValue]
+        if format.hasQuality { a += ["--quality", quality] }
+        return a
+    }
+
+    /// nil se la cartella è utilizzabile, altrimenti il motivo.
+    func destProblem() -> String? {
+        let comps = URL(fileURLWithPath: destPath).pathComponents
+        if comps.count > 2, comps[1] == "Volumes",
+           !FileManager.default.fileExists(atPath: "/Volumes/" + comps[2]) {
+            return "Il disco \"\(comps[2])\" non è collegato. Collegalo oppure scegli "
+                + "un'altra cartella nelle Impostazioni."
+        }
+        do {
+            try FileManager.default.createDirectory(atPath: destPath,
+                                                    withIntermediateDirectories: true)
+        } catch {
+            return "Non posso scrivere in \(destDisplay): \(error.localizedDescription)"
+        }
+        return nil
+    }
     private let python: String
     private let script: String
     /// Cartella con ffmpeg/ffprobe/deno inclusi nell'app (solo build autonoma).
@@ -120,7 +180,54 @@ final class SyncModel {
         }
     }
 
-    var selectedPlaylists: [Playlist] { playlists.filter { selected.contains($0.id) } }
+    var selectedPlaylists: [Playlist] {
+        (spotify + playlists).filter { selected.contains($0.id) }
+    }
+
+    // MARK: - Spotify (playlist pubbliche aggiunte per link)
+
+    var spotify: [Playlist] = SyncModel.loadSpotify() {
+        didSet {
+            UserDefaults.standard.set(try? JSONEncoder().encode(spotify), forKey: "spotify")
+        }
+    }
+    var spotifyError: String?
+    var isAddingSpotify = false
+
+    private static func loadSpotify() -> [Playlist] {
+        guard let data = UserDefaults.standard.data(forKey: "spotify") else { return [] }
+        return (try? JSONDecoder().decode([Playlist].self, from: data)) ?? []
+    }
+
+    var visibleSpotify: [Playlist] {
+        spotify.filter { filter.isEmpty || $0.name.localizedCaseInsensitiveContains(filter) }
+    }
+
+    /// Legge nome e numero brani dal link; true se aggiunta.
+    func addSpotify(_ link: String) async -> Bool {
+        isAddingSpotify = true
+        spotifyError = nil
+        defer { isAddingSpotify = false }
+        switch await runToEnd(["spotify-info", link.trimmingCharacters(in: .whitespaces)]) {
+        case .failure(let e):
+            spotifyError = e.message
+            return false
+        case .success(let data):
+            guard let pl = try? JSONDecoder().decode(Playlist.self, from: data) else {
+                spotifyError = "Risposta non valida dallo script."
+                return false
+            }
+            spotify.removeAll { $0.id == pl.id }
+            spotify.append(pl)
+            selected.insert(pl.id)
+            return true
+        }
+    }
+
+    func removeSpotify(_ id: String) {
+        spotify.removeAll { $0.id == id }
+        selected.remove(id)
+    }
 
     func toggle(_ id: String) {
         if selected.contains(id) { selected.remove(id) } else { selected.insert(id) }
@@ -193,7 +300,7 @@ final class SyncModel {
             do {
                 playlists = try JSONDecoder().decode([Playlist].self, from: data)
                 // scarta selezioni di playlist che non esistono più
-                selected = selected.intersection(playlists.map(\.id))
+                selected = selected.intersection(playlists.map(\.id) + spotify.map(\.id))
             } catch {
                 self.error = "Risposta non valida dallo script: \(error.localizedDescription)"
             }
@@ -220,9 +327,13 @@ final class SyncModel {
     }
 
     func download(_ r: SearchResult) async {
+        if let problem = destProblem() {
+            downloads[r.id] = .failed(problem)
+            return
+        }
         downloads[r.id] = .downloading
-        var args = ["get", r.id, "--dest", dest, "--yt-title", r.title,
-                    "--channel", r.channel, "--json"]
+        var args = ["get", r.id, "--dest", destPath, "--yt-title", r.title,
+                    "--channel", r.channel, "--json"] + audioArgs
         if !cookies.isEmpty { args += ["--cookies-from-browser", cookies] }
         switch await runToEnd(args) {
         case .failure(let e):
@@ -242,10 +353,14 @@ final class SyncModel {
     func sync() async {
         let todo = selectedPlaylists
         guard !todo.isEmpty else { return }
+        runs = []
+        if !dryRun, let problem = destProblem() {
+            error = problem
+            return
+        }
         isRunning = true
         cancelled = false
         error = nil
-        runs = []
         defer {
             isRunning = false
             process = nil
@@ -256,7 +371,8 @@ final class SyncModel {
             runs.append(PlaylistRun(id: pl.id, name: pl.name))
             let idx = runs.count - 1
 
-            var args = ["sync", "--id", pl.id, "--dest", dest, "--json"]
+            var args = (pl.spotifyURL.map { ["sync", "--spotify", $0] } ?? ["sync", "--id", pl.id])
+                + ["--dest", destPath, "--json"] + audioArgs
             if dryRun { args.append("--dry-run") }
             if !cookies.isEmpty { args += ["--cookies-from-browser", cookies] }
 
@@ -289,7 +405,7 @@ final class SyncModel {
     }
 
     func openDest(_ folder: String? = nil) {
-        let path = folder ?? (dest as NSString).expandingTildeInPath
+        let path = folder ?? destPath
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
@@ -335,6 +451,8 @@ final class SyncModel {
         case "warn":
             if let i {
                 upsert(idx, i) { $0.note = msg }
+            } else {
+                runs[idx].note = msg
             }
         case "end":
             runs[idx].summary = msg.replacingOccurrences(of: "--- ", with: "")

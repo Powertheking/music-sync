@@ -65,8 +65,22 @@ bundle_python() {
 }
 
 # --- ffmpeg minimo: solo ciò che serve per webm/m4a -> mp3, lame statico -----
+# componenti di ffmpeg: input da YouTube (webm/opus, m4a/aac) -> mp3, m4a, flac, wav, aiff
+FFMPEG_COMPONENTS=(
+    --enable-encoder=libmp3lame,aac,flac,pcm_s16le,pcm_s16be
+    --enable-decoder=opus,aac,aac_latm,mp3,mp3float,vorbis,flac,pcm_s16le,pcm_s16be,pcm_f32le
+    --enable-demuxer=matroska,mov,mp3,aac,ogg,wav,aiff,flac
+    --enable-muxer=mp3,wav,aiff,flac,mov,mp4,ipod
+    --enable-parser=opus,aac,mpegaudio,vorbis,flac
+    --enable-protocol=file,pipe
+    --enable-filter=aresample,aformat,anull,atrim,volume,null,format
+)
+
 build_ffmpeg() {
-    local dst="$CACHE/ffmpeg-$FFMPEG_VERSION-bin"
+    # la cache dipende da versione e componenti: se cambiano si ricompila
+    local key
+    key="$(echo "$FFMPEG_VERSION ${FFMPEG_COMPONENTS[*]}" | shasum | cut -c1-8)"
+    local dst="$CACHE/ffmpeg-$FFMPEG_VERSION-$key"
     if [ ! -x "$dst/ffmpeg" ]; then
         echo "Compilo ffmpeg ${FFMPEG_VERSION} (qualche minuto)..."
         local tarball="$CACHE/ffmpeg-$FFMPEG_VERSION.tar.xz"
@@ -87,12 +101,7 @@ build_ffmpeg() {
             ./configure \
                 --disable-everything --disable-autodetect --disable-doc --disable-network \
                 --disable-ffplay --enable-ffmpeg --enable-ffprobe --enable-zlib \
-                --enable-libmp3lame --enable-encoder=libmp3lame \
-                --enable-decoder=opus,aac,aac_latm,mp3,mp3float,vorbis,flac,pcm_s16le,pcm_f32le \
-                --enable-demuxer=matroska,mov,mp3,aac,ogg,wav,flac \
-                --enable-muxer=mp3,wav,mov,mp4,ipod --enable-parser=opus,aac,mpegaudio,vorbis,flac \
-                --enable-protocol=file,pipe \
-                --enable-filter=aresample,aformat,anull,atrim,volume,null,format \
+                --enable-libmp3lame "${FFMPEG_COMPONENTS[@]}" \
                 --extra-cflags="-I$lame/include -mmacosx-version-min=14.0" \
                 --extra-ldflags="-L$work/lame -mmacosx-version-min=14.0" \
                 --extra-libs="-lmpg123" >/dev/null ||

@@ -11,6 +11,9 @@ struct MusicSyncApp: App {
                 .frame(minWidth: 860, minHeight: 520)
                 .task { await model.loadPlaylists() }
         }
+        Settings {
+            SettingsView().environment(model)
+        }
     }
 }
 
@@ -65,6 +68,12 @@ struct PlaylistsTab: View {
                 } label: {
                     Label("Apri cartella", systemImage: "folder")
                 }
+                .help("Apri \(model.destDisplay)")
+
+                SettingsLink {
+                    Label("Impostazioni", systemImage: "gearshape")
+                }
+                .help("Cartella, formato e qualità")
 
                 if model.isRunning {
                     Button(role: .cancel) {
@@ -91,32 +100,40 @@ struct PlaylistsTab: View {
 
 struct PlaylistSidebar: View {
     @Environment(SyncModel.self) private var model
+    @State private var showAddSpotify = false
 
     var body: some View {
         @Bindable var model = model
         List {
-            ForEach(model.visible) { pl in
-                Toggle(isOn: Binding(
-                    get: { model.selected.contains(pl.id) },
-                    set: { _ in model.toggle(pl.id) }
-                )) {
-                    HStack {
-                        Text(pl.name).lineLimit(1)
-                        if !pl.isRegular {
-                            Text(pl.smart ? "smart" : "sistema")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+            Section {
+                ForEach(model.visibleSpotify) { pl in
+                    PlaylistToggle(pl: pl)
+                        .contextMenu {
+                            Button("Apri in Spotify") {
+                                if let u = pl.spotifyURL.flatMap(URL.init(string:)) {
+                                    NSWorkspace.shared.open(u)
+                                }
+                            }
+                            Button("Rimuovi dall'elenco", role: .destructive) {
+                                model.removeSpotify(pl.id)
+                            }
                         }
-                        Spacer()
-                        Text(pl.count >= 0 ? "\(pl.count)" : "–")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
                 }
-                .toggleStyle(.checkbox)
+                Button {
+                    showAddSpotify = true
+                } label: {
+                    Label("Aggiungi link Spotify…", systemImage: "plus.circle")
+                }
+                .buttonStyle(.borderless)
                 .disabled(model.isRunning)
+            } header: {
+                Text("Spotify")
+            }
+            Section("Musica") {
+                ForEach(model.visible) { PlaylistToggle(pl: $0) }
             }
         }
+        .sheet(isPresented: $showAddSpotify) { AddSpotifySheet() }
         .overlay {
             if model.isLoading {
                 ProgressView("Leggo le playlist da Music…")
@@ -146,6 +163,80 @@ struct PlaylistSidebar: View {
     }
 }
 
+struct PlaylistToggle: View {
+    @Environment(SyncModel.self) private var model
+    let pl: Playlist
+
+    var body: some View {
+        Toggle(isOn: Binding(
+            get: { model.selected.contains(pl.id) },
+            set: { _ in model.toggle(pl.id) }
+        )) {
+            HStack {
+                Text(pl.name).lineLimit(1)
+                if !pl.isRegular {
+                    Text(pl.smart ? "smart" : "sistema")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if pl.isSpotify, pl.count >= 100 {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .help("Spotify mostra solo i primi 100 brani di una playlist")
+                }
+                Text(pl.count >= 0 ? "\(pl.count)" : "–")
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .toggleStyle(.checkbox)
+        .disabled(model.isRunning)
+    }
+}
+
+struct AddSpotifySheet: View {
+    @Environment(SyncModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var link = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Aggiungi playlist Spotify").font(.headline)
+            Text("In Spotify: tasto ··· sulla playlist > Condividi > Copia link alla playlist. "
+                 + "Funziona solo con playlist pubbliche e legge al massimo i primi 100 brani.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            TextField("https://open.spotify.com/playlist/…", text: $link)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(add)
+            if let err = model.spotifyError {
+                Text(err).font(.caption).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                if model.isAddingSpotify { ProgressView().controlSize(.small) }
+                Spacer()
+                Button("Annulla", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Aggiungi", action: add)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(link.isEmpty || model.isAddingSpotify)
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
+        .onAppear { model.spotifyError = nil }
+    }
+
+    private func add() {
+        Task {
+            if await model.addSpotify(link) { dismiss() }
+        }
+    }
+}
+
 struct RunView: View {
     @Environment(SyncModel.self) private var model
 
@@ -164,7 +255,8 @@ struct RunView: View {
                     "Scegli le playlist",
                     systemImage: "music.note.list",
                     description: Text("Spunta le playlist a sinistra e premi Sincronizza.\n"
-                                      + "I file finiscono in \(model.dest).")
+                                      + "Formato \(model.format.label), cartella "
+                                      + "\(model.destDisplay). Si cambiano nelle Impostazioni (⌘,).")
                 )
             } else {
                 List {
@@ -198,6 +290,9 @@ struct RunHeader: View {
             }
             if run.total > 0 {
                 ProgressView(value: Double(run.completed), total: Double(run.total))
+            }
+            if let note = run.note {
+                Text(note).font(.caption).foregroundStyle(.orange)
             }
             if let summary = run.summary {
                 Text(summary)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-music_sync.py - sincronizza playlist di Music.app (macOS) con cartelle locali di MP3
+music_sync.py - sincronizza playlist di Music.app (macOS) con cartelle locali di file audio
 scaricati da YouTube, con controllo sulla durata per evitare live/cover sbagliati.
 
 Setup:
@@ -176,8 +176,21 @@ def find_matches(t, tol, cookies_browser=None):
     return [c for _, c in scored]
 
 
-def download_mp3(video_id, outbase, cookies_browser=None):
+# formato -> (codec per yt-dlp, estensione). aiff passa da wav e si converte dopo.
+FORMATS = {
+    "mp3": ("mp3", ".mp3"),
+    "m4a": ("m4a", ".m4a"),
+    "flac": ("flac", ".flac"),
+    "wav": ("wav", ".wav"),
+    "aiff": ("wav", ".aiff"),
+}
+
+
+def download_audio(video_id, outbase, fmt="mp3", quality="192", cookies_browser=None):
+    """Scarica l'audio e lo converte nel formato scelto. quality vale per mp3/m4a:
+    kbps (128-320) oppure 0 = VBR alta qualità."""
     from yt_dlp import YoutubeDL
+    codec, ext = FORMATS[fmt]
     opts = {
         **ydl_base(cookies_browser),
         "format": "bestaudio/best",
@@ -185,32 +198,47 @@ def download_mp3(video_id, outbase, cookies_browser=None):
         "noprogress": True,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "192",
+            "preferredcodec": codec,
+            "preferredquality": str(quality),
         }],
     }
     with YoutubeDL(opts) as y:
         y.download([f"https://www.youtube.com/watch?v={video_id}"])
-    return Path(str(outbase) + ".mp3")
+    out = Path(str(outbase) + ext)
+    if fmt == "aiff":
+        wav = Path(str(outbase) + ".wav")
+        r = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav),
+                            "-c:a", "pcm_s16be", str(out)], capture_output=True, text=True)
+        if r.returncode != 0:
+            raise RuntimeError(f"conversione AIFF fallita: {r.stderr.strip()}")
+        wav.unlink()
+    return out
 
 
-def tag_mp3(path, t):
+def tag_file(path, t):
+    """Titolo/artista/album; ID3 per mp3/wav/aiff, tag nativi per m4a e flac."""
     try:
-        from mutagen.easyid3 import EasyID3
-        from mutagen.id3 import ID3NoHeaderError
-        try:
-            tags = EasyID3(str(path))
-        except ID3NoHeaderError:
-            import mutagen
-            f = mutagen.File(str(path), easy=True)
-            f.add_tags()
+        import mutagen
+        from mutagen.id3 import TALB, TIT2, TPE1
+        if path.suffix in (".mp3", ".wav", ".aiff"):
+            f = mutagen.File(str(path))
+            if f.tags is None:
+                f.add_tags()
+            tags = f.tags
+            tags.add(TIT2(encoding=3, text=t["name"]))
+            tags.add(TPE1(encoding=3, text=t["artist"]))
+            if t.get("album"):
+                tags.add(TALB(encoding=3, text=t["album"]))
             f.save()
-            tags = EasyID3(str(path))
-        tags["title"] = t["name"]
-        tags["artist"] = t["artist"]
-        if t.get("album"):
-            tags["album"] = t["album"]
-        tags.save()
+        else:
+            f = mutagen.File(str(path), easy=True)
+            if f.tags is None:
+                f.add_tags()
+            f["title"] = t["name"]
+            f["artist"] = t["artist"]
+            if t.get("album"):
+                f["album"] = t["album"]
+            f.save()
     except Exception as e:
         emit("warn", f"    (tag non scritti: {e})")
 
@@ -238,8 +266,9 @@ def cookies_usable(browser):
 
 
 def sync_playlist(name, dest, tol, prune, dry, use_local, cookies_browser=None,
-                  pid=None, folder_name=None):
-    tracks = jxa(JXA_TRACKS, name, *([pid] if pid else []))
+                  pid=None, folder_name=None, fmt="mp3", quality="192", tracks=None):
+    if tracks is None:
+        tracks = jxa(JXA_TRACKS, name, *([pid] if pid else []))
     folder = Path(dest).expanduser() / (folder_name or safe(name))
     emit("start", f"\n=== {name} ({len(tracks)} brani) -> {folder}",
          playlist=name, total=len(tracks), folder=str(folder))
@@ -262,7 +291,8 @@ def sync_playlist(name, dest, tol, prune, dry, use_local, cookies_browser=None,
         base = safe(label)
         target_stem = base
         used = {e["file"] for k, e in state.items() if k != t["id"]}
-        if f"{base}.mp3" in used or (folder / f"{base}.mp3").exists():
+        ext = FORMATS[fmt][1]
+        if f"{base}{ext}" in used or (folder / f"{base}{ext}").exists():
             target_stem = f"{base} [{t['id'][-4:]}]"
 
         # 1) file locale già presente in Music
@@ -301,8 +331,9 @@ def sync_playlist(name, dest, tol, prune, dry, use_local, cookies_browser=None,
                 done = True
                 break
             try:
-                out = download_mp3(m["id"], folder / target_stem, cookies_browser)
-                tag_mp3(out, t)
+                out = download_audio(m["id"], folder / target_stem, fmt, quality,
+                                     cookies_browser)
+                tag_file(out, t)
                 state[t["id"]] = {"file": out.name, "src": "youtube", "vid": m["id"],
                                   "name": t["name"], "artist": t["artist"]}
                 save_state(folder, state)
@@ -356,6 +387,53 @@ def sync_playlist(name, dest, tol, prune, dry, use_local, cookies_browser=None,
          ok=ok, skipped=skipped, failed=failed, removed=removed)
 
 
+# --- Spotify ------------------------------------------------------------------
+# Senza account developer: la pagina "embed" pubblica della playlist contiene
+# titolo, artisti e durata dei brani, ma al massimo i primi 100.
+SPOTIFY_EMBED_LIMIT = 100
+
+
+def spotify_playlist(url):
+    """Playlist pubblica da link Spotify -> {id, name, tracks}."""
+    import ssl
+    import urllib.request
+    m = re.search(r"playlist[/:]([A-Za-z0-9]{22})", url)
+    if not m:
+        sys.exit("Link Spotify non valido: serve un link a una playlist "
+                 "(open.spotify.com/playlist/...)")
+    sid = m.group(1)
+    try:
+        import certifi
+        ctx = ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        ctx = None
+    req = urllib.request.Request(
+        f"https://open.spotify.com/embed/playlist/{sid}",
+        headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
+    try:
+        html = urllib.request.urlopen(req, timeout=20, context=ctx).read().decode("utf-8")
+        data = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
+                         html, re.S).group(1)
+        ent = json.loads(data)["props"]["pageProps"]["state"]["data"]["entity"]
+    except Exception as e:
+        sys.exit(f"Playlist Spotify non leggibile (privata o link sbagliato?): {e}")
+    tracks = []
+    for t in ent.get("trackList") or []:
+        tracks.append({
+            "id": t.get("uri") or t.get("title"),
+            "name": t.get("title") or "",
+            "artist": (t.get("subtitle") or "").replace("\xa0", " "),
+            "album": "",
+            "duration": (t.get("duration") or 0) / 1000,
+            "location": None,
+        })
+    return {"id": sid, "name": ent.get("name") or sid, "tracks": tracks}
+
+
+def spotify_folder(name):
+    return f"{safe(name)} (Spotify)"
+
+
 def search_youtube(query, n=10, cookies_browser=None):
     """Risultati grezzi di una ricerca, senza filtro sulla durata."""
     from yt_dlp import YoutubeDL
@@ -392,18 +470,18 @@ def guess_tags(title, channel):
 
 
 def get_single(video_id, dest, artist=None, title=None, yt_title="", channel="",
-               cookies_browser=None):
-    """Scarica un singolo video come MP3 in dest/Singoli."""
+               cookies_browser=None, fmt="mp3", quality="192"):
+    """Scarica un singolo video nel formato scelto in dest/Singoli."""
     g_artist, g_title = guess_tags(yt_title, channel)
     t = {"artist": artist or g_artist, "name": title or g_title, "album": ""}
     folder = Path(dest).expanduser() / "Singoli"
     folder.mkdir(parents=True, exist_ok=True)
     stem = safe(f"{t['artist']} - {t['name']}" if t["artist"] else t["name"])
-    if (folder / f"{stem}.mp3").exists():
+    if (folder / f"{stem}{FORMATS[fmt][1]}").exists():
         stem = f"{stem} [{video_id[-4:]}]"
     emit("start", f"scarico {t['artist']} - {t['name']}", id=video_id)
-    out = download_mp3(video_id, folder / stem, cookies_browser)
-    tag_mp3(out, t)
+    out = download_audio(video_id, folder / stem, fmt, quality, cookies_browser)
+    tag_file(out, t)
     emit("done", str(out), id=video_id, file=str(out))
 
 
@@ -418,6 +496,11 @@ def main():
     s = sub.add_parser("sync", help="sincronizza una o tutte le playlist")
     s.add_argument("playlist", nargs="?", help="nome playlist (omettere con --all)")
     s.add_argument("--id", help="persistentID della playlist (per nomi duplicati)")
+    s.add_argument("--spotify", metavar="LINK",
+                   help="playlist Spotify pubblica invece di una di Musica "
+                        f"(massimo {SPOTIFY_EMBED_LIMIT} brani)")
+    si = sub.add_parser("spotify-info", help="nome e numero brani di una playlist Spotify")
+    si.add_argument("url")
     s.add_argument("--all", action="store_true",
                    help="tutte le playlist normali (escluse smart, cartelle e di sistema)")
     s.add_argument("--json", action="store_true",
@@ -438,7 +521,7 @@ def main():
     se.add_argument("-n", type=int, default=10, help="numero di risultati (default 10)")
     se.add_argument("--json", action="store_true")
     se.add_argument("--cookies-from-browser", metavar="BROWSER[:PROFILO]")
-    g = sub.add_parser("get", help="scarica un singolo video come MP3 in <dest>/Singoli")
+    g = sub.add_parser("get", help="scarica un singolo video in <dest>/Singoli")
     g.add_argument("video_id")
     g.add_argument("--dest", default="~/Music/YT-Sync")
     g.add_argument("--artist", help="tag artista (default: ricavato dal titolo)")
@@ -447,6 +530,12 @@ def main():
     g.add_argument("--channel", default="", help="canale YouTube, per ricavare i tag")
     g.add_argument("--json", action="store_true")
     g.add_argument("--cookies-from-browser", metavar="BROWSER[:PROFILO]")
+    for p in (s, g):
+        p.add_argument("--format", choices=list(FORMATS), default="mp3",
+                       help="formato audio (default mp3)")
+        p.add_argument("--quality", default="192",
+                       help="mp3/m4a: kbps (128, 192, 256, 320) oppure 0 = VBR alta "
+                            "qualità (default 192)")
     a = ap.parse_args()
 
     if a.cmd == "search":
@@ -475,10 +564,19 @@ def main():
             yt_title = info.get("title") or ""
             channel = info.get("channel") or info.get("uploader") or ""
         try:
-            get_single(a.video_id, a.dest, a.artist, a.title, yt_title, channel, cookies)
+            get_single(a.video_id, a.dest, a.artist, a.title, yt_title, channel, cookies,
+                       a.format, a.quality)
         except Exception as e:
             emit("error", f"download fallito: {e}", id=a.video_id)
             sys.exit(1)
+        return
+
+    if a.cmd == "spotify-info":
+        sp = spotify_playlist(a.url)
+        print(json.dumps({"id": "sp:" + sp["id"], "name": sp["name"],
+                          "count": len(sp["tracks"]), "smart": False, "special": "none",
+                          "spotifyURL": f"https://open.spotify.com/playlist/{sp['id']}"},
+                         ensure_ascii=False))
         return
 
     if a.cmd == "list":
@@ -491,6 +589,21 @@ def main():
         return
 
     JSON_OUT = a.json
+    if a.spotify:
+        if shutil.which("ffmpeg") is None:
+            sys.exit("ffmpeg non trovato: brew install ffmpeg")
+        sp = spotify_playlist(a.spotify)
+        if len(sp["tracks"]) >= SPOTIFY_EMBED_LIMIT:
+            emit("warn", f"Spotify mostra solo i primi {SPOTIFY_EMBED_LIMIT} brani: "
+                         "quelli successivi non vengono sincronizzati")
+        cookies = a.cookies_from_browser
+        if cookies and not cookies_usable(cookies):
+            cookies = None
+        sync_playlist(sp["name"], a.dest, a.tolerance, a.prune, a.dry_run, False, cookies,
+                      folder_name=spotify_folder(sp["name"]), fmt=a.format,
+                      quality=a.quality, tracks=sp["tracks"])
+        return
+
     if not a.all and not a.playlist and not a.id:
         ap.error("indica una playlist (nome o --id) oppure usa --all")
     if shutil.which("ffmpeg") is None:
@@ -521,7 +634,8 @@ def main():
             sys.exit(f"playlist '{a.playlist}' non trovata")
     for p in todo:
         sync_playlist(p["name"], a.dest, a.tolerance, a.prune, a.dry_run, not a.no_local,
-                      cookies, pid=p["id"], folder_name=folder_for(p))
+                      cookies, pid=p["id"], folder_name=folder_for(p),
+                      fmt=a.format, quality=a.quality)
 
 
 if __name__ == "__main__":

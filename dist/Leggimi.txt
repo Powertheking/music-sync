@@ -1,9 +1,9 @@
 MUSIC SYNC
 ==========
 
-Sincronizza le playlist di Musica (Apple Music) in cartelle di MP3 scaricati
-da YouTube, controllando la durata per scartare live, cover e remix.
-Puoi anche cercare e scaricare un singolo brano.
+Sincronizza le playlist di Musica (Apple Music) e le playlist pubbliche di
+Spotify in cartelle di file audio scaricati da YouTube, controllando la durata
+per scartare live, cover e remix. Puoi anche cercare e scaricare un singolo brano.
 
 Requisiti: Mac con chip Apple (M1 o successivi) e macOS 14 Sonoma o successivo.
 
@@ -36,10 +36,23 @@ Scheda "Playlist"
 - I file finiscono in Musica/YT-Sync, una cartella per playlist, con la
   playlist .m3u8 nello stesso ordine di Musica.
 - Risincronizzando vengono scaricati solo i brani nuovi.
+- Spotify: "Aggiungi link Spotify..." e incolla il link della playlist
+  (in Spotify: ··· > Condividi > Copia link alla playlist). Solo playlist
+  pubbliche, e al massimo i primi 100 brani.
+
+
+IMPOSTAZIONI (menu Music Sync > Impostazioni, oppure ⌘,)
+-------------------------------------------------------
+
+- Cartella: dove salvare, anche su un disco esterno.
+- Formato: MP3 (128-320 kbps o VBR), AAC/.m4a, FLAC, WAV o AIFF.
+  L'audio di YouTube è già compresso: FLAC/WAV/AIFF non suonano meglio,
+  servono solo se il tuo software li richiede. Il formato vale per i brani
+  nuovi; quelli già scaricati restano com'erano.
 
 Scheda "Cerca brano"
 - Scrivi artista e titolo, premi Invio e scegli "Scarica" sul risultato giusto.
-- Gli MP3 finiscono in Musica/YT-Sync/Singoli.
+- I file finiscono nella sottocartella Singoli.
 
 
 VIDEO CON BLOCCO ETÀ (FACOLTATIVO)

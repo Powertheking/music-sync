@@ -1,15 +1,16 @@
 # Music Sync
 
-App macOS che sincronizza le playlist di Musica (Apple Music) in cartelle di MP3
-scaricati da YouTube, scartando i match sbagliati (live, cover, remix) con un
-controllo sulla durata. Permette anche di cercare e scaricare un singolo brano.
+App macOS che sincronizza le playlist di Musica (Apple Music) e le playlist
+pubbliche di Spotify in cartelle di file audio scaricati da YouTube, scartando i
+match sbagliati (live, cover, remix) con un controllo sulla durata. Permette anche di cercare e scaricare un singolo brano.
 
 > Uso personale. Scaricare da YouTube può violare i termini di servizio di YouTube.
 
 ## Com'è fatta
 
 - `music_sync.py` — il motore: legge le playlist via JXA (`osascript`), cerca su
-  YouTube con yt-dlp, converte in MP3 con ffmpeg e scrive i tag con mutagen.
+  YouTube con yt-dlp, converte (mp3, m4a, flac, wav, aiff) con ffmpeg e scrive i
+  tag con mutagen.
   Funziona anche da solo da terminale.
 - `MusicSyncApp/` — l'app SwiftUI (Swift Package) che lancia lo script e ne legge
   gli eventi JSON.
@@ -26,11 +27,17 @@ python3.13 -m venv .venv && .venv/bin/pip install "yt-dlp[default]" mutagen
 .venv/bin/python music_sync.py list
 .venv/bin/python music_sync.py sync "Nome Playlist" --dry-run
 .venv/bin/python music_sync.py sync "Nome Playlist" --cookies-from-browser safari
+.venv/bin/python music_sync.py sync --spotify "https://open.spotify.com/playlist/..."
+.venv/bin/python music_sync.py sync "Nome Playlist" --format flac --dest /Volumes/Disco/Musica
 .venv/bin/python music_sync.py search "luciid charm"
-.venv/bin/python music_sync.py get <video_id>
+.venv/bin/python music_sync.py get <video_id> --format mp3 --quality 320
 ```
 
-I file vanno in `~/Music/YT-Sync/<Playlist>/` (più `Singoli/` per i brani
+Formati: `mp3` (con `--quality` 128-320 o `0` = VBR V0), `m4a`, `flac`, `wav`,
+`aiff`. Le playlist Spotify si leggono dalla pagina embed pubblica, senza
+account developer, quindi solo playlist pubbliche e al massimo 100 brani.
+
+I file vanno in `~/Music/YT-Sync/<Playlist>/` (o in `--dest`) (più `Singoli/` per i brani
 scaricati a mano), con la playlist `.m3u8` e lo stato `.sync_state.json`:
 risincronizzando si scaricano solo i brani nuovi.
 
