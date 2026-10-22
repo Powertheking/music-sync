@@ -73,6 +73,25 @@ Alcuni video YouTube richiedono il login. Per scaricarli:
 Se non lo fai, l'app funziona lo stesso: salta solo quei pochi brani.
 
 
+AGGIORNAMENTI
+-------------
+
+Quando esce una versione nuova, all'avvio compare in alto una barra
+"È disponibile Music Sync ...": premi "Aggiorna" e l'app si scarica,
+si installa e si riapre da sola. Puoi controllare anche dal menu
+Music Sync > Controlla aggiornamenti.
+I permessi dati (Musica, Accesso completo al disco) restano validi.
+
+
+LICENZA E CODICE SORGENTE
+-------------------------
+
+Music Sync è software libero, con licenza GNU GPL versione 3 o successiva.
+Il codice sorgente è su https://github.com/Powertheking/music-sync
+Licenza e licenze dei componenti inclusi (Python, yt-dlp, FFmpeg, ...) sono
+in Impostazioni > Informazioni.
+
+
 NOTE
 ----
 

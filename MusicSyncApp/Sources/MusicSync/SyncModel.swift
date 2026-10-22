@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Daniele Mazzanti
 import AppKit
 import Foundation
 import Observation
@@ -131,6 +133,13 @@ final class SyncModel {
     var destPath: String { (dest as NSString).expandingTildeInPath }
     /// Percorso breve da mostrare: ~/... per la home, nome del volume per i dischi esterni.
     var destDisplay: String { (destPath as NSString).abbreviatingWithTildeInPath }
+
+    static let defaultTolerance = 6
+    /// Differenza massima di durata (secondi) tra brano e video, solo per le sync.
+    var tolerance: Int = UserDefaults.standard.object(forKey: "tolerance") as? Int
+        ?? SyncModel.defaultTolerance {
+        didSet { UserDefaults.standard.set(tolerance, forKey: "tolerance") }
+    }
 
     private var audioArgs: [String] {
         var a = ["--format", format.rawValue]
@@ -453,7 +462,7 @@ final class SyncModel {
             var args = pl.csvPath.map { ["sync", "--csv", $0, "--name", pl.name] }
                 ?? pl.spotifyURL.map { ["sync", "--spotify", $0] }
                 ?? ["sync", "--id", pl.id]
-            args += ["--dest", destPath, "--json"] + audioArgs
+            args += ["--dest", destPath, "--json", "--tolerance", "\(tolerance)"] + audioArgs
             if dryRun { args.append("--dry-run") }
             if !cookies.isEmpty { args += ["--cookies-from-browser", cookies] }
 

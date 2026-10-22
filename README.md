@@ -67,3 +67,31 @@ La build autonoma richiede `brew install lame mpg123 deno` e include nell'app:
 Risultato: Mac Apple Silicon con macOS 14 o successivo. L'app è firmata solo
 ad hoc, quindi al primo avvio va aperta con *Impostazioni di Sistema > Privacy e
 sicurezza > Apri comunque* (vedi `dist/Leggimi.txt`).
+
+## Rilasci e aggiornamenti
+
+```bash
+./release.sh 1.0.1 "Novità: ..."
+```
+
+Aggiorna `VERSION`, compila l'app autonoma, crea il tag e pubblica il DMG su
+GitHub Releases. Le app installate controllano l'ultima release all'avvio e si
+aggiornano con un clic; l'aggiornamento viene accettato solo se firmato con lo
+stesso certificato dell'app installata.
+
+La firma usa un certificato personale "Music Sync Signing" nel Portachiavi (non
+Apple Developer): così i permessi di macOS restano validi tra le versioni, ma
+al primo avvio serve comunque "Apri comunque". **Il certificato va conservato**
+(Accesso Portachiavi > esporta come .p12): con un certificato diverso le app
+installate rifiuterebbero gli aggiornamenti.
+
+## Licenza
+
+Copyright (C) 2026 Daniele Mazzanti. Music Sync è software libero: puoi
+ridistribuirlo e/o modificarlo secondo i termini della GNU General Public License
+versione 3 o (a tua scelta) successiva. Vedi [LICENSE](LICENSE).
+
+L'app autonoma include componenti di terze parti con le loro licenze (Python,
+yt-dlp, mutagen, FFmpeg in configurazione LGPL, LAME, mpg123, Deno, ...):
+l'elenco completo viene generato in fase di build da `dist/collect_licenses.py`
+ed è nell'app in Impostazioni > Informazioni.

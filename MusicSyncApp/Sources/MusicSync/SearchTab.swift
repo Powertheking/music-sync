@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Daniele Mazzanti
 import SwiftUI
 
 /// Cerca un brano su YouTube e scaricalo in <dest>/Singoli nel formato scelto.

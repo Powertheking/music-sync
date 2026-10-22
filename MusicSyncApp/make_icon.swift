@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Daniele Mazzanti
 // Disegna l'icona dell'app (1024x1024) e la salva come PNG.
 // Uso: swift make_icon.swift <out.png>
 import AppKit

@@ -1,9 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Daniele Mazzanti
 import AppKit
 import SwiftUI
 
 /// Impostazioni (⌘,): cartella di destinazione, formato e qualità.
 struct SettingsView: View {
     @Environment(SyncModel.self) private var model
+    @Environment(Updater.self) private var updater
 
     var body: some View {
         @Bindable var model = model
@@ -47,6 +50,46 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section("Scelta del video") {
+                LabeledContent("Margine sulla durata") {
+                    HStack {
+                        Text("± \(model.tolerance) secondi").monospacedDigit()
+                        Stepper("", value: $model.tolerance, in: 2...20).labelsHidden()
+                    }
+                }
+                Text(toleranceNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Ripristina ± \(SyncModel.defaultTolerance) secondi") {
+                    model.tolerance = SyncModel.defaultTolerance
+                }
+                .disabled(model.tolerance == SyncModel.defaultTolerance)
+            }
+
+            Section("Informazioni") {
+                LabeledContent("Versione") {
+                    HStack {
+                        Text(updater.currentVersion)
+                        updateStatus
+                        Button("Controlla aggiornamenti") {
+                            Task { await updater.check(userInitiated: true) }
+                        }
+                        .disabled(updater.state == .checking)
+                    }
+                }
+                HStack {
+                    Button("Codice sorgente") { NSWorkspace.shared.open(Updater.repoURL) }
+                    Button("Licenza") { openResource("LICENSE.txt") }
+                    Button("Licenze di terze parti") {
+                        openResource("Licenze di terze parti.txt")
+                    }
+                }
+                Text("Music Sync è software libero (GNU GPL v3 o successiva): puoi usarlo, "
+                     + "studiarlo, modificarlo e ridistribuirlo alle stesse condizioni.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .frame(width: 480)
@@ -54,6 +97,44 @@ struct SettingsView: View {
         .onChange(of: model.format) { _, f in
             // V0 esiste solo per mp3
             if f == .m4a, model.quality == "0" { model.quality = "256" }
+        }
+    }
+
+    @ViewBuilder private var updateStatus: some View {
+        switch updater.state {
+        case .checking: ProgressView().controlSize(.small)
+        case .upToDate: Text("· aggiornata").foregroundStyle(.secondary)
+        case .failed(let msg): Text("· \(msg)").foregroundStyle(.red).lineLimit(2)
+        default:
+            if let r = updater.available {
+                Text("· disponibile la \(r.version)").foregroundStyle(Color.accentColor)
+            }
+        }
+    }
+
+    private func openResource(_ name: String) {
+        let url = Bundle.main.resourceURL!.appendingPathComponent(name)
+        if FileManager.default.fileExists(atPath: url.path) {
+            NSWorkspace.shared.open(url)
+        } else {
+            NSWorkspace.shared.open(Updater.repoURL)
+        }
+    }
+
+    private var toleranceNote: String {
+        let base = "Un video viene scelto solo se dura quanto il brano in Musica o su Spotify, "
+            + "con questo margine. "
+        switch model.tolerance {
+        case ..<5:
+            return base + "Margine stretto: quasi solo versioni identiche all'originale, ma "
+                + "più brani \"non trovati\" (molti video hanno qualche secondo di intro o "
+                + "di silenzio in più)."
+        case 5...8:
+            return base + "Valore consigliato: scarta live, remix ed edit, accetta le piccole "
+                + "differenze dei video ufficiali."
+        default:
+            return base + "Margine largo: trova più brani, ma aumenta il rischio di prendere "
+                + "versioni sbagliate (radio edit, extended, live). Controlla con Solo anteprima."
         }
     }
 

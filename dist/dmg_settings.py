@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Daniele Mazzanti
 # Impostazioni per dmgbuild (vedi make_dmg in build_app.sh).
 # Variabili passate con -D: app, readme, background
 import os.path

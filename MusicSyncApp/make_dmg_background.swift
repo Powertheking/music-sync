@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Daniele Mazzanti
 // Disegna lo sfondo della finestra del DMG con la freccia "trascina in Applicazioni".
 // Uso: swift make_dmg_background.swift <out.png> <scala>
 //

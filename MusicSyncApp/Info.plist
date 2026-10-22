@@ -15,9 +15,11 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1</string>
+    <string>@VERSION@</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>@BUILD@</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2026 Daniele Mazzanti · GPL-3.0-or-later</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>NSHighResolutionCapable</key>

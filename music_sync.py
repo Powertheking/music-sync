@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Daniele Mazzanti
 """
 music_sync.py - sincronizza playlist di Music.app (macOS) con cartelle locali di file audio
 scaricati da YouTube, con controllo sulla durata per evitare live/cover sbagliati.

@@ -1,19 +1,31 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Daniele Mazzanti
 import SwiftUI
 
 @main
 struct MusicSyncApp: App {
     @State private var model = SyncModel()
+    @State private var updater = Updater()
 
     var body: some Scene {
         WindowGroup("Music Sync") {
             ContentView()
                 .environment(model)
+                .environment(updater)
                 .frame(minWidth: 860, minHeight: 520)
                 .task { await model.loadPlaylists() }
+                .task { await updater.check() }
         }
         .defaultSize(width: 1040, height: 680)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Controlla aggiornamenti…") {
+                    Task { await updater.check(userInitiated: true) }
+                }
+            }
+        }
         Settings {
-            SettingsView().environment(model)
+            SettingsView().environment(model).environment(updater)
         }
     }
 }
@@ -26,6 +38,7 @@ struct ContentView: View {
             SearchTab()
                 .tabItem { Label("Cerca brano", systemImage: "magnifyingglass") }
         }
+        .safeAreaInset(edge: .top, spacing: 0) { UpdateBanner() }
     }
 }
 

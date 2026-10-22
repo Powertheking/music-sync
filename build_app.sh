@@ -1,10 +1,14 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Daniele Mazzanti
 # Compila Music Sync.app in build/.
 #
 #   ./build_app.sh               app per questo Mac (usa .venv e Homebrew di questa cartella)
 #   ./build_app.sh --standalone  app autonoma da condividere: Python, yt-dlp, ffmpeg e deno
 #                                dentro il pacchetto, più build/Music Sync.dmg da condividere
 #
+# La firma usa il certificato "Music Sync Signing" del Portachiavi, se presente
+# (oppure MUSIC_SYNC_SIGN_ID); senza, firma ad hoc.
 # Requisiti per --standalone: Xcode, Homebrew con lame, mpg123 e deno
 # (brew install lame mpg123 deno).
 set -euo pipefail
@@ -18,6 +22,13 @@ BUILD="$ROOT/build"
 CACHE="$BUILD/cache"
 APP="$BUILD/Music Sync.app"
 RES="$APP/Contents/Resources"
+VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
+BUILD_NUMBER="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
+# Firma: certificato "Music Sync Signing" nel Portachiavi se c'è (i permessi di macOS
+# restano validi tra un aggiornamento e l'altro), altrimenti firma ad hoc.
+SIGN_ID="${MUSIC_SYNC_SIGN_ID:-$(security find-certificate -c "Music Sync Signing" -Z 2>/dev/null |
+    awk '/SHA-1/ {print $3; exit}')}"
+SIGN_ID="${SIGN_ID:--}"
 STANDALONE=0
 [ "${1:-}" = "--standalone" ] && STANDALONE=1
 mkdir -p "$CACHE"
@@ -137,6 +148,12 @@ bundle_deno() {
     chmod 755 "$RES/bin/deno"
 }
 
+# Info.plist con percorso Python (vuoto = quello dentro l'app), versione e build
+plist() {
+    sed -e "s|@PYTHON@|$1|" -e "s|@VERSION@|$VERSION|" -e "s|@BUILD@|$BUILD_NUMBER|" \
+        "$ROOT/MusicSyncApp/Info.plist" > "$APP/Contents/Info.plist"
+}
+
 # --- build ---------------------------------------------------------------------
 cd "$ROOT/MusicSyncApp"
 swift build -c release
@@ -146,21 +163,25 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$RES"
 cp "$BIN" "$APP/Contents/MacOS/MusicSync"
 cp "$ROOT/music_sync.py" "$RES/"
+cp "$ROOT/LICENSE" "$RES/LICENSE.txt"
 make_icon
 
 if [ $STANDALONE = 1 ]; then
-    sed "s|@PYTHON@||" Info.plist > "$APP/Contents/Info.plist"
+    plist ""
     bundle_python
     build_ffmpeg
     bundle_deno
+    "$RES/python/bin/python3" -I "$ROOT/dist/collect_licenses.py" "$RES" \
+        "$CACHE/ffmpeg-$FFMPEG_VERSION.tar.xz" "$FFMPEG_VERSION" \
+        "$RES/Licenze di terze parti.txt" >/dev/null
     # firma ad hoc ogni eseguibile e libreria, poi il pacchetto
     find "$RES" -type f \( -perm -u+x -o -name "*.so" -o -name "*.dylib" \) -print0 |
         while IFS= read -r -d '' f; do
             if file -b "$f" | grep -q Mach-O; then
-                codesign --force --sign - "$f" 2>/dev/null
+                codesign --force --timestamp=none --sign "$SIGN_ID" "$f" 2>/dev/null
             fi
         done
-    codesign --force --sign - "$APP"
+    codesign --force --timestamp=none --sign "$SIGN_ID" "$APP"
     codesign --verify --deep --strict "$APP"
     rm -f "$BUILD/Music Sync.zip"
     make_dmg
@@ -169,7 +190,7 @@ if [ $STANDALONE = 1 ]; then
 else
     PY="$ROOT/.venv/bin/python"
     [ -x "$PY" ] || { echo "Manca $PY: crea prima il venv (vedi music_sync.py)"; exit 1; }
-    sed "s|@PYTHON@|$PY|" Info.plist > "$APP/Contents/Info.plist"
-    codesign --force --sign - "$APP"
+    plist "$PY"
+    codesign --force --timestamp=none --sign "$SIGN_ID" "$APP"
     echo "Creata: $APP"
 fi
