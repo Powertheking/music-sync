@@ -251,7 +251,7 @@ struct UpdateBanner: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .background(.bar)
+            .background(Color.opaqueBar)
             .overlay(alignment: .bottom) { Divider() }
         }
     }

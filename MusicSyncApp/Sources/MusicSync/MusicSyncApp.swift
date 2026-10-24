@@ -39,6 +39,10 @@ struct ContentView: View {
                 .tabItem { Label("Cerca brano", systemImage: "magnifyingglass") }
         }
         .safeAreaInset(edge: .top, spacing: 0) { UpdateBanner() }
+        // anche barra del titolo e fascia delle schede opache (vedi Color.opaqueBar)
+        .background(Color.opaqueBar.ignoresSafeArea())
+        .toolbarBackground(Color.opaqueBar, for: .windowToolbar)
+        .toolbarBackground(.visible, for: .windowToolbar)
     }
 }
 
@@ -65,6 +69,9 @@ struct PlaylistsTab: View {
         NavigationSplitView {
             PlaylistSidebar()
                 .navigationSplitViewColumnWidth(min: 260, ideal: 300)
+                // sfondo opaco: la barra laterale standard è semitrasparente e
+                // lascia filtrare il colore della scrivania o delle finestre dietro
+                .background(Color.opaqueSidebar.ignoresSafeArea())
         } detail: {
             RunView()
                 // tutta l'altezza, così la barra sta davvero in fondo
@@ -132,7 +139,7 @@ struct SyncBar: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(.bar)
+        .background(Color.opaqueBar)
         .overlay(alignment: .top) { Divider() }
     }
 
@@ -176,6 +183,7 @@ struct PlaylistSidebar: View {
                 ForEach(model.visible) { PlaylistToggle(pl: $0) }
             }
         }
+        .scrollContentBackground(.hidden)
         .sheet(isPresented: $showAddSpotify) { SpotifyImportSheet() }
         // un CSV di Exportify trascinato sull'elenco si importa direttamente
         .dropDestination(for: URL.self) { urls, _ in
@@ -214,7 +222,7 @@ struct PlaylistSidebar: View {
                 .disabled(model.isLoading || model.isRunning)
             }
             .padding(8)
-            .background(.bar)
+            .background(Color.opaqueBar)
         }
     }
 }
@@ -359,4 +367,14 @@ struct TrackRowView: View {
         case .failed: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
         }
     }
+}
+
+extension Color {
+    /// Sfondi opachi al posto dei materiali semitrasparenti di macOS
+    /// (barra laterale e barre), che si colorano con ciò che sta dietro la finestra.
+    static let opaqueSidebar = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 0.17, alpha: 1) : NSColor(white: 0.925, alpha: 1)
+    })
+    static let opaqueBar = Color(nsColor: .windowBackgroundColor)
 }
