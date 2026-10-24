@@ -100,7 +100,9 @@ final class SyncModel {
     var showAll = false
     var dryRun = false
     var selected: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "selected") ?? []) {
-        didSet { UserDefaults.standard.set(Array(selected), forKey: "selected") }
+        didSet {
+            if !Self.isDemo { UserDefaults.standard.set(Array(selected), forKey: "selected") }
+        }
     }
     var cookies: String = UserDefaults.standard.string(forKey: "cookies") ?? "safari" {
         didSet { UserDefaults.standard.set(cookies, forKey: "cookies") }
@@ -199,7 +201,9 @@ final class SyncModel {
 
     var spotify: [Playlist] = SyncModel.loadSpotify() {
         didSet {
-            UserDefaults.standard.set(try? JSONEncoder().encode(spotify), forKey: "spotify")
+            if !Self.isDemo {
+                UserDefaults.standard.set(try? JSONEncoder().encode(spotify), forKey: "spotify")
+            }
         }
     }
     var spotifyError: String?
@@ -379,6 +383,10 @@ final class SyncModel {
     }
 
     func loadPlaylists() async {
+        if Self.isDemo {
+            loadDemo()
+            return
+        }
         isLoading = true
         error = nil
         defer { isLoading = false }
