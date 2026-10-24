@@ -36,14 +36,11 @@ final class Updater {
 
     // MARK: - Controllo
 
-    /// Al massimo un controllo ogni 6 ore, a meno che lo chieda l'utente.
+    /// Controlla a ogni avvio: il limite dell'API GitHub (60 richieste l'ora) è per
+    /// indirizzo IP di chi usa l'app, quindi una richiesta ad avvio è irrilevante.
+    /// Gli errori si mostrano solo se il controllo l'ha chiesto l'utente.
     func check(userInitiated: Bool = false) async {
-        let key = "lastUpdateCheck"
-        if !userInitiated,
-           let last = UserDefaults.standard.object(forKey: key) as? Date,
-           Date().timeIntervalSince(last) < 6 * 3600 { return }
         state = .checking
-        UserDefaults.standard.set(Date(), forKey: key)
 
         var req = URLRequest(url: URL(string:
             "https://api.github.com/repos/\(Self.repo)/releases/latest")!)
