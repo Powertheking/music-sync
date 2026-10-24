@@ -89,6 +89,13 @@ struct SettingsView: View {
                      + "studiarlo, modificarlo e ridistribuirlo alle stesse condizioni.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                LabeledContent("Ti è utile?") {
+                    Button {
+                        NSWorkspace.shared.open(URL(string: "https://ko-fi.com/powertheking")!)
+                    } label: {
+                        Label("Offrimi un caffè", systemImage: "cup.and.saucer.fill")
+                    }
+                }
             }
         }
         .formStyle(.grouped)
