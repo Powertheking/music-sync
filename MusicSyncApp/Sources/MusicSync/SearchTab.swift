@@ -19,7 +19,6 @@ struct SearchTab: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(model.query.trimmingCharacters(in: .whitespaces).isEmpty
                               || model.isSearching)
-                CookiesPicker().fixedSize()
                 Button {
                     model.openDest(model.destPath + "/Singoli")
                 } label: {
@@ -49,6 +48,8 @@ struct SearchTab: View {
                 }
             }
         }
+        // senza, con la lista vuota il campo di ricerca finisce a metà finestra
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear { focused = true }
     }
 }

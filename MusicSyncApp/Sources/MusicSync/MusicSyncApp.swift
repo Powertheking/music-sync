@@ -76,8 +76,9 @@ struct PlaylistsTab: View {
         .searchable(text: $model.filter, placement: .sidebar, prompt: "Cerca playlist")
         .toolbar {
             ToolbarItemGroup {
+                // nella toolbar .fixedSize() lo riduce alle sole freccine: larghezza fissa
                 CookiesPicker()
-                    .fixedSize()
+                    .frame(width: 150)
 
                 Button {
                     model.openDest()
